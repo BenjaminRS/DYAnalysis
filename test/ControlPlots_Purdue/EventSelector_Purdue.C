@@ -40,6 +40,18 @@
 #include "Dimuon.h"
 #include "Dielectron.h"
 
+double deltaPhi(double phi1, double phi2) {
+  double result = phi1 - phi2;
+  while (result > M_PI) result -= 2*M_PI;
+  while (result <= -M_PI) result += 2*M_PI;
+  return result;
+}
+
+double deltaR(double eta1, double phi1, double eta2, double phi2) {
+  double deta = eta1 - eta2;
+  double dphi = deltaPhi(phi1, phi2);
+  return sqrt(deta*deta + dphi*dphi);
+}
 
 EventSelector_Purdue::EventSelector_Purdue(TTree* ) : fNumberOfEvents(0), fNumberOfGoodEvents(0), fTotalDataSize(0)
 {
@@ -58,19 +70,19 @@ EventSelector_Purdue::EventSelector_Purdue(TTree* ) : fNumberOfEvents(0), fNumbe
   //Alternatively, cross section can be obtainedi from: https://twiki.cern.ch/twiki/bin/viewauth/CMS/StandardModelCrossSections
   //or: http://cms.cern.ch/iCMS/jsp/mcprod/admin/requestmanagement.jsp?campid=Summer12 
   Sigma_DY1020 = 3708.0;
-  Sigma_DY20   = 1871.0-1.485;
-  Sigma_DY200  = 1.485-0.1086;
-  Sigma_DY400  = 0.1086-0.04415;
-  Sigma_DY500  = 0.04415-0.01024;
-  Sigma_DY700  = 0.01024-0.005491;
-  Sigma_DY800  = 0.005491-0.001796;
-  Sigma_DY1000 = 0.001796;
-  Sigma_tt700  = 18.19; //NLO 211.0;
-  Sigma_tt1000 = 3.44; //NLO 211.0;
+  Sigma_DY20   = 1871.0;
+  Sigma_DY200  = 1.485;
+  Sigma_DY400  = 0.1086;
+  Sigma_DY500  = 0.04415;
+  Sigma_DY700  = 0.01024;
+  Sigma_DY800  = 0.005491;
+  Sigma_DY1000 = 0.001796; 
+  Sigma_tt700  = 18.19;
+  Sigma_tt1000 = 3.44;
   Sigma_ttjets = 23.85;
   Sigma_tW     = 11.17;
   Sigma_tbarW  = 11.17;
-  Sigma_WJets  = 37509.0; //NLO 30400.0; 
+  Sigma_WJets  = 37509.0;
   Sigma_DYtautau1020 = 3708.0; //promote to NNLO? 3795.4 
   Sigma_DYtautau20   = 1871.0; //promote to NNLO? 1915.1
   Sigma_QCD15to20    = 7.022E8;
@@ -80,12 +92,12 @@ EventSelector_Purdue::EventSelector_Purdue(TTree* ) : fNumberOfEvents(0), fNumbe
   Sigma_QCD80to120   = 1033680.0;
   Sigma_QCD120to170  = 156293.3;
   Sigma_QCD170to300  = 34020.0;
-  Sigma_WZJetsTo2L2Q =  2.31; //1.755;
-  Sigma_WZJetsTo3LNu   = 1.11; //0.8674; 
-  Sigma_ZZJetsTo2L2Nu  =  0.364791; //0.28;
-  Sigma_ZZJetsTo2L2Q   =  2.448690; //0.91;
-  Sigma_ZZJetsTo4L     =  0.176908; //0.1296;
-  Sigma_WWJetsTo2L2Nu  =  5.812; //4.7;
+  Sigma_WZJetsTo2L2Q =  2.31; 
+  Sigma_WZJetsTo3LNu   = 1.11;
+  Sigma_ZZJetsTo2L2Nu  =  0.364791;
+  Sigma_ZZJetsTo2L2Q   =  2.448690;
+  Sigma_ZZJetsTo4L     =  0.176908;
+  Sigma_WWJetsTo2L2Nu  =  5.812;
 
   //numbers for NNLO scaling FIXME
   //10-20: (NLO powheg 10-20) * (NNLO m>20) / (NLO powheg m>20)
@@ -101,7 +113,7 @@ EventSelector_Purdue::EventSelector_Purdue(TTree* ) : fNumberOfEvents(0), fNumbe
   FilterEff_DY700  = 1.;
   FilterEff_DY800  = 1.;
   FilterEff_DY1000 = 1.;
-  FilterEff_tt700  = 0.074; 
+  FilterEff_tt700  = 0.074;
   FilterEff_tt1000 = 0.014;
   FilterEff_ttjets = 1.0;
   FilterEff_tW     = 0.996;
@@ -116,12 +128,12 @@ EventSelector_Purdue::EventSelector_Purdue(TTree* ) : fNumberOfEvents(0), fNumbe
   FilterEff_QCD80to120   = 0.0395;
   FilterEff_QCD120to170  = 0.0473;
   FilterEff_QCD170to300  = 0.0676;
-  FilterEff_WZJetsTo2L2Q      = 1.0; //1.755
-  FilterEff_WZJetsTo3LNu      = 1.0; //0.8674 
-  FilterEff_ZZJetsTo2L2Nu     = 1.0;  //0.28
-  FilterEff_ZZJetsTo2L2Q      = 1.0;  //0.91
-  FilterEff_ZZJetsTo4L        = 1.0;  //0.1296 
-  FilterEff_WWJetsTo2L2Nu     = 1.0;  //4.7
+  FilterEff_WZJetsTo2L2Q      = 1.0;
+  FilterEff_WZJetsTo3LNu      = 1.0;
+  FilterEff_ZZJetsTo2L2Nu     = 1.0;
+  FilterEff_ZZJetsTo2L2Q      = 1.0;
+  FilterEff_ZZJetsTo4L        = 1.0;
+  FilterEff_WWJetsTo2L2Nu     = 1.0; 
 
 }
 
@@ -232,7 +244,7 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
 
     //pick up the correct correction map, there is data & MC dependence of the maps!
     _runopt = 0;
-    if( momCorrType == "RunD")  _runopt = 1;
+    //if( momCorrType == "RunD")  _runopt = 1;
   
    // The Process() function is called for each entry in the tree (or possibly
    // keyed object in the case of PROOF) to be processed. The entry argument
@@ -298,7 +310,7 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
               WEIGHT = Sigma_DY1020*FilterEff_DY1020;
            } else if (filename.Contains("DYM200") || filename.Contains("DYE200")) {
               WEIGHT = Sigma_DY200*FilterEff_DY200;
-           } else if ((filename.Contains("DYM20") && !filename.Contains("DYM200")) || (filename.Contains("DYE20") && !filename.Contains("DYE200"))) { 
+           } else if ((filename.Contains("DYM20") && !filename.Contains("DYM200")) || (filename.Contains("DYE20") && !filename.Contains("DYE200"))) {
               WEIGHT = Sigma_DY20*FilterEff_DY20;
            } else if (filename.Contains("DYM400") || filename.Contains("DYE400")) {
               WEIGHT = Sigma_DY400*FilterEff_DY400;
@@ -310,23 +322,27 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
               WEIGHT = Sigma_DY800*FilterEff_DY800;
            } else if (filename.Contains("DYM1000") || filename.Contains("DYE1000")) {
               WEIGHT = Sigma_DY1000*FilterEff_DY1000;
-           } else if (filename.Contains("tt700")) { 
+           } else if (filename.Contains("tt700")) {
               WEIGHT = Sigma_tt700*FilterEff_tt700;
-           } else if (filename.Contains("tt1000")) { 
+           } else if (filename.Contains("tt1000")) {
               WEIGHT = Sigma_tt1000*FilterEff_tt1000;
-           } else if (filename.Contains("ttjets")) { 
+           } else if (filename.Contains("ttjets")) {
               WEIGHT = Sigma_ttjets*FilterEff_ttjets;
-           } else if (filename.Contains("WJets")) { 
+           } else if (filename.Contains("tbarW")) {
+              WEIGHT = Sigma_tbarW*FilterEff_tbarW;
+           } else if (filename.Contains("tW")) {
+              WEIGHT = Sigma_tW*FilterEff_tW;
+           } else if (filename.Contains("WJets") && !filename.Contains("WWJetsTo2L2Nu")) {
               WEIGHT = Sigma_WJets*FilterEff_WJets;
-           } else if (filename.Contains("WZJetsTo2L2Q")) { 
+           } else if (filename.Contains("WZJetsTo2L2Q")) {
               WEIGHT = Sigma_WZJetsTo2L2Q*FilterEff_WZJetsTo2L2Q;
-           } else if (filename.Contains("WZJetsTo3LNu")) { 
+           } else if (filename.Contains("WZJetsTo3LNu")) {
               WEIGHT = Sigma_WZJetsTo3LNu*FilterEff_WZJetsTo3LNu;
-           } else if (filename.Contains("ZZJetsTo2L2Nu")) { 
+           } else if (filename.Contains("ZZJetsTo2L2Nu")) {
               WEIGHT = Sigma_ZZJetsTo2L2Nu*FilterEff_ZZJetsTo2L2Nu;
-           } else if (filename.Contains("ZZJetsTo2L2Q")) { 
+           } else if (filename.Contains("ZZJetsTo2L2Q")) {
               WEIGHT = Sigma_ZZJetsTo2L2Q*FilterEff_ZZJetsTo2L2Q;
-           } else if (filename.Contains("ZZJetsTo4L")) { 
+           } else if (filename.Contains("ZZJetsTo4L")) {
               WEIGHT = Sigma_ZZJetsTo4L*FilterEff_ZZJetsTo4L;
            } else if (filename.Contains("WWJetsTo2L2Nu")) {
               WEIGHT = Sigma_WWJetsTo2L2Nu*FilterEff_WWJetsTo2L2Nu;
@@ -349,7 +365,6 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
            } else if (filename.Contains("QCD170to300")) {
               WEIGHT = Sigma_QCD170to300*FilterEff_QCD170to300;
            }
-
       } //isMC
       //scale up if normalizing to lumi
 
@@ -415,8 +430,8 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
 
         if (mode == "MuMu") {
 
-          if (hlt_trigFired[1] == 1) isTriggered = true;
-          if( !isTriggered ) return kTRUE;
+         if (hlt_trigFired[1] == 1) isTriggered = true;
+         if( !isTriggered ) return kTRUE;
 
           muons->clear();
           b_muons->GetEntry(entry);
@@ -451,11 +466,55 @@ Bool_t EventSelector_Purdue::Process(Long64_t entry)
               best_val = dimu_it->vtxTrkProb_;
               index = dimu_it;
             }
-            //passed
-            index = dimu_it;
-            pass = true; 
         }//dimuon loop
-           if(!pass) continue;
+           if(best_val == -99999) continue;
+
+           //for futher
+           purdue::Muon* mu_index1 = &(muons->at(index->muon_links_.first));
+           purdue::Muon* mu_index2 = &(muons->at(index->muon_links_.second));
+
+           //trigger matching begin
+           int isMatched = 0;
+           double trigEta[2] = {-999};
+           double trigPhi[2] = {-999};
+           int _ntrig = 0;
+           for( int k = 0; k < hlt_ntrig; k++ ) {
+             bool isFired = false;
+             if (hlt_trigFired[1] == 1) isFired = true;
+             if( !isFired ) continue;
+              //Just make sure that there is two objects trigger 
+              //matched - nothing more! Don't care which ones exactly 
+             if( _ntrig == 0 ) {
+                trigEta[_ntrig] = hlt_trigEta[k];
+                trigPhi[_ntrig] = hlt_trigPhi[k];
+                _ntrig++;
+             }
+             else {
+                if( deltaR(hlt_trigEta[k], hlt_trigPhi[k], trigEta[0], trigPhi[0]) < 0.001 ) continue;
+                else {
+                  if( _ntrig == 1 ) {
+                    //trigType[_ntrig] = hlt_trigType[k];
+                    //trigPt[_ntrig] = hlt_trigPt[k];
+                   trigEta[_ntrig] = hlt_trigEta[k];
+                     trigPhi[_ntrig] = hlt_trigPhi[k];
+                    _ntrig++;
+                  }
+                  else {
+                   if( deltaR(hlt_trigEta[k], hlt_trigPhi[k], trigEta[0], trigPhi[0]) < 0.001 ) continue;
+                   if( deltaR(hlt_trigEta[k], hlt_trigPhi[k], trigEta[1], trigPhi[1]) < 0.001 ) continue;
+                }
+              }
+            }
+          }
+           //if( _ntrig < 2 ) cout << "Less than 2 trig objects!!!" << endl;
+          for( int k = 0; k < 2; k++ ) {
+              double dR1 = deltaR(trigEta[k], trigPhi[k], mu_index1->eta_, mu_index1->phi_);
+              double dR2 = deltaR(trigEta[k], trigPhi[k], mu_index2->eta_, mu_index2->phi_);
+              if( dR1 < 0.2 || dR2 < 0.2 ) {
+                  isMatched++;
+              }
+          }
+          if( isMatched < 2) continue;
 
            // setup for momentum correction
            // Only for RECO, do nothing for GEN
@@ -727,8 +786,6 @@ void EventSelector_Purdue::Terminate()
 
    this_momCorrType = dynamic_cast<TNamed *>(fInput->FindObject("momCorrType"));
    momCorrType = this_momCorrType ? this_momCorrType->GetTitle() : "";
-   //apply only for MuMu
-   //if (mode != "MuMu") momCorrType = ""; 
    
    std::cout << "NAME = " << z << std::endl;
    //FIXME must have this dir first
@@ -833,8 +890,8 @@ bool EventSelector_Purdue::goodElectron(const purdue::Electron& ele1) {
     if (ele1.isConv_) return false;
 
     double iso1_n = ele1.neuHadIso_+ele1.gammaIso_; //std::max(Electron1_neuthadiso[j]+Electron1_egammaiso[j]-Electron1_rho[j]*Electron1_AEff[j],0.0);
-    double iso1 = ele1.chIso_+iso1_n; //(iso1_n + Electron1_chhadiso[j])/Electron1_pT[j];
-        
+    double iso1 = (ele1.chIso_+iso1_n)/ele1.pt_; //(iso1_n + Electron1_chhadiso[j])/Electron1_pT[j];
+    
     // Barrel/endcap switch
     if (fabs(ele1.scEta_) < 1.442) {
         //cut_dEtaIn
@@ -872,3 +929,4 @@ bool EventSelector_Purdue::goodElectron(const purdue::Electron& ele1) {
 
    return true;
 }
+

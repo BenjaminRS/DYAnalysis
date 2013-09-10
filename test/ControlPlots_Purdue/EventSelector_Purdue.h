@@ -19,7 +19,6 @@
 #include <vector>
 #include <string>
 
-//can I forward declare no?
 #include "Muon.h"
 #include "Electron.h"
 #include "Dimuon.h"
@@ -31,7 +30,7 @@ using namespace std;
 
 class EventSelector_Purdue : public TSelector {
 public :
-   //set up priors for the case when we do not use the ntuple weights
+
    double Sigma_DY1020;
    double Sigma_DY20;
    double Sigma_DY200;
@@ -146,6 +145,9 @@ public :
 
    Int_t           hlt_ntrig;
    Bool_t          hlt_trigFired[1000000];
+   Double_t        hlt_trigPt[1000000];
+   Double_t        hlt_trigEta[1000000];
+   Double_t        hlt_trigPhi[1000000];
 
    Int_t           GENnPair;
    Double_t        GENRapidity[2];   //[GENnPair]
@@ -191,6 +193,10 @@ public :
 
    TBranch        *b_HLT_ntrig;
    TBranch        *b_HLT_trigFired;
+   TBranch        *b_HLT_trigPt;
+   TBranch        *b_HLT_trigEta;
+   TBranch        *b_HLT_trigPhi;
+
 
    TBranch        *b_GENnPair;   //!
    TBranch        *b_GENInvMass;   //!
@@ -271,6 +277,9 @@ void EventSelector_Purdue::Init(TTree *tree)
 
    fChain->SetBranchAddress("HLT_ntrig", &hlt_ntrig, &b_HLT_ntrig);
    fChain->SetBranchAddress("HLT_trigFired",hlt_trigFired,&b_HLT_trigFired);
+   fChain->SetBranchAddress("HLT_trigPt", hlt_trigPt,&b_HLT_trigPt);
+   fChain->SetBranchAddress("HLT_trigEta", hlt_trigEta, &b_HLT_trigEta);
+   fChain->SetBranchAddress("HLT_trigPhi", hlt_trigPhi, &b_HLT_trigPhi);
 
    fChain->SetBranchAddress("GENnPair", &GENnPair, &b_GENnPair);
    fChain->SetBranchAddress("GENInvMass", GENInvMass, &b_GENInvMass);
