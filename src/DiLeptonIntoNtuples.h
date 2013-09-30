@@ -68,15 +68,15 @@ class DiLeptonIntoNtuples : public edm::EDAnalyzer {
       void fillMET(const edm::Event &iEvent);            // fill MET information
       void fillJet(const pat::Jet* jet, const edm::Event &iEvent);            // fill jet and b-tagging information
       void fillMuon(const pat::Muon *mu, const edm::Event&);
-      void fillElectron(const pat::Electron* ele, const edm::Event&); 
+      void fillElectron(const reco::GsfElectron* ele, const edm::Event&); 
       void fillDimuon(int mu1, int mu2, const edm::EventSetup& iSetup, const edm::Event&);
       void fillDielectron(int ele1, int ele2, const edm::Event&);
       void fillPhoton(const pat::Photon*);
-      void setEleIsolations(const edm::Event&, const pat::Electron*, purdue::Electron*&);
+      void setEleIsolations(const edm::Event&, const reco::GsfElectron*, purdue::Electron*&);
 
       double isolEffectAreasAl(double);
-      double D0Corrected(const pat::Electron *ele, const reco::Vertex *pv) const;
-      double DzCorrected(const pat::Electron *ele, const reco::Vertex *pv) const;
+      double D0Corrected(const reco::GsfElectron *ele, const reco::Vertex *pv) const;
+      double DzCorrected(const reco::GsfElectron *ele, const reco::Vertex *pv) const;
       void hltReport(const edm::Event &iEvent);          // fill list of triggers fired in an event
       template <class T> float angleBetween(const T & lhs, const T & rhs) const;
       int motherId(const reco::GenParticle& par) const;
@@ -99,6 +99,9 @@ class DiLeptonIntoNtuples : public edm::EDAnalyzer {
       //flags to select which info to store in the ntuple
       bool theStorePriVtx2MuFlag_;             // Yes or No to store primary vertex for dimuon candidates
       bool isMC_;  //turn gen on and off
+      bool isSignal_;
+      bool runOnMuInput_;
+      bool runOnEleInput_;
       bool isAOD_; //inserted temporarily to resolve the issues with event content
 
       std::vector<edm::InputTag>  isoValInputTags_;
@@ -113,7 +116,8 @@ class DiLeptonIntoNtuples : public edm::EDAnalyzer {
       std::vector<double> PileUpRD_;
       std::vector<double> PileUpMC_;
 
-      //int HLT_trigType[MPSIZE];
+      static const int MPSIZE = 1000;
+      int HLT_trigType[MPSIZE];
       HLTConfigProvider hltConfig_;
       std::vector<std::string > MuonHLT_;
       std::vector<std::string > trigModuleNames_;
@@ -137,7 +141,6 @@ class DiLeptonIntoNtuples : public edm::EDAnalyzer {
       int Nelectrons_; 
 
       //counts 
-      static const int MPSIZE = 1000;
       int GENnPair_;
       int Njets_;
 

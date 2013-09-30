@@ -96,6 +96,7 @@
 using namespace std;
 using namespace edm;
 using namespace pat;
+using namespace reco;
 
 //
 DiLeptonIntoNtuples::DiLeptonIntoNtuples(const edm::ParameterSet& iConfig)
@@ -112,6 +113,11 @@ DiLeptonIntoNtuples::DiLeptonIntoNtuples(const edm::ParameterSet& iConfig)
   theTrackLabel_                     = iConfig.getUntrackedParameter<edm::InputTag>("Track", edm::InputTag("generalTracks"));
 
   theStorePriVtx2MuFlag_             =  iConfig.getUntrackedParameter<bool>("StorePriVtx2MuFlag", true);
+
+  runOnEleInput_                     =  iConfig.getUntrackedParameter<bool>("runOnEleInput");
+  runOnMuInput_                      =  iConfig.getUntrackedParameter<bool>("runOnMuInput");
+
+  isSignal_                          =  iConfig.getUntrackedParameter<bool>("isSignal");
   isMC_                              =  iConfig.getUntrackedParameter<bool>("isMC");
   if( isMC_ ) {                      
     PileUpRD_                        = iConfig.getParameter< std::vector<double> >("PileUpRD");
@@ -233,59 +239,62 @@ void DiLeptonIntoNtuples::analyze(const edm::Event& iEvent, const edm::EventSetu
   pvz_              = theVertex_->position().z();
   hasGoodPV_        = hasGoodPV;
 
+
+  if (runOnMuInput_) {
+
   //muon
   edm::Handle< pat::MuonCollection > muonHandle;
   iEvent.getByLabel(theMuonLabel_, muonHandle);
   Nmuons_ = muonHandle->size();
-
-  // electrons
-  edm::Handle<pat::ElectronCollection> electronHandle;
-  iEvent.getByLabel(theElectronLabel_, electronHandle);
-  Nelectrons_ = electronHandle->size();
-
-  // electrons
-  edm::Handle<pat::PhotonCollection> photonHandle;
-  iEvent.getByLabel(thePhotonLabel_, photonHandle);
-
-  edm::Handle<pat::JetCollection> jetHandle;
-  iEvent.getByLabel(theJetLabel_, jetHandle);
-  Njets_ = jetHandle->size();
-
   //
   // Loop through muons 
   //
-  for (unsigned int i1 = 0; i1 < muonHandle->size(); i1++) {
-     const pat::Muon it1 = muonHandle->at(i1);
-     fillMuon(&it1,iEvent);
-     for (unsigned int i2 = i1+1; i2 < muonHandle->size(); i2++) {
-      const pat::Muon it2 = muonHandle->at(i2);  
-      fillDimuon(i1,i2,iSetup,iEvent);
+  if (!muonHandle.failedToGet()) {
+   for (unsigned int i1 = 0; i1 < muonHandle->size(); i1++) {
+      const pat::Muon it1 = muonHandle->at(i1);
+      fillMuon(&it1,iEvent);
+      for (unsigned int i2 = i1+1; i2 < muonHandle->size(); i2++) {
+       const pat::Muon it2 = muonHandle->at(i2);  
+       fillDimuon(i1,i2,iSetup,iEvent);
+     }
     }
+   }
   }
+
 
   //
   // Loop through electrons.
   //
-  for (unsigned int i1 = 0; i1 < electronHandle->size(); i1++) {
-     const pat::Electron it1 = electronHandle->at(i1);
-     fillElectron(&it1,iEvent);
-     for (unsigned int i2 = i1+1; i2 < electronHandle->size(); i2++) {
-      const pat::Electron it2 = electronHandle->at(i2);
-      fillDielectron(i1,i2,iEvent);
+  // electrons
+  if (runOnEleInput_) {  
+  edm::Handle<reco::GsfElectronCollection> electronHandle;
+  iEvent.getByLabel("calibratedElectrons","calibratedGsfElectrons", electronHandle);
+  //iEvent.getByLabel("gsfElectrons",electronHandle);
+  
+  Nelectrons_ = electronHandle->size();
+  if (!electronHandle.failedToGet()) {
+   for (unsigned int i1 = 0; i1 < electronHandle->size(); i1++) {
+      const reco::GsfElectron it1 = electronHandle->at(i1);
+      fillElectron(&it1,iEvent);
+      for (unsigned int i2 = i1+1; i2 < electronHandle->size(); i2++) {
+       const reco::GsfElectron it2 = electronHandle->at(i2);
+       fillDielectron(i1,i2,iEvent);
+     }
     }
+   }
   }
-
-  for(pat::PhotonCollection::const_iterator it = photonHandle->begin(); it != photonHandle->end(); ++it) {
-    fillPhoton(&*it);
-  } 
+  //for(pat::PhotonCollection::const_iterator it = photonHandle->begin(); it != photonHandle->end(); ++it) {
+  //  fillPhoton(&*it);
+  //} 
 
   //Jet
-  for(pat::JetCollection::const_iterator it = jetHandle->begin(); it != jetHandle->end(); ++it) {
-    fillJet(&*it,iEvent);
-   }
+  //for(pat::JetCollection::const_iterator it = jetHandle->begin(); it != jetHandle->end(); ++it) {
+  //  fillJet(&*it,iEvent);
+  // }
 
     // Gen 
-  if ( isMC_) { 
+  if ( isSignal_) { 
+
      edm::Handle <reco::GenParticleCollection> particles;
      iEvent.getByLabel("genParticles", particles);
 
@@ -322,7 +331,7 @@ void DiLeptonIntoNtuples::analyze(const edm::Event& iEvent, const edm::EventSetu
          GENInvMass[GENnPair_] = aDYcand.mass();
          GENRapidity[GENnPair_] = aDYcand.rapidity();
          GENPt[GENnPair_] = aDYcand.pt();
-         //cout << "gen mass = " << aDYcand.mass() << " " << MClepton1.status() << " " << MClepton2.status() << endl;
+         ////cout << "gen mass = " << aDYcand.mass() << " " << MClepton1.status() << " " << MClepton2.status() << endl;
 
          GENAngle[GENnPair_] = angleBetween(MClepton1, MClepton2);
 
@@ -391,7 +400,9 @@ DiLeptonIntoNtuples::beginJob()
 
   // for trigger matching
   DiLeptonTree_->Branch("HLT_ntrig", &HLT_ntrig_,"HLT_ntrig_/I");
+  DiLeptonTree_->Branch("HLT_trigType", &HLT_trigType,"HLT_trigType[HLT_ntrig_]/I");
   DiLeptonTree_->Branch("HLT_trigFired", &HLT_trigFired,"HLT_trigFired[HLT_ntrig_]/B");
+  DiLeptonTree_->Branch("HLT_trigName", &HLT_trigName_);
   DiLeptonTree_->Branch("HLT_trigPt", &HLT_trigPt,"HLT_trigPt[HLT_ntrig_]/D");
   DiLeptonTree_->Branch("HLT_trigEta", &HLT_trigEta,"HLT_trigEta[HLT_ntrig_]/D");
   DiLeptonTree_->Branch("HLT_trigPhi", &HLT_trigPhi,"HLT_trigPhi[HLT_ntrig_]/D");
@@ -450,79 +461,96 @@ DiLeptonIntoNtuples::beginJob()
 
 }
 
-
 void
 DiLeptonIntoNtuples::beginRun(const Run & iRun, const EventSetup & iSetup)
 {
-   string trigs[nTrigName_] = {
-     "HLT_Mu17_Mu8_v*",
+
+   const int nTrigName = 6;
+   string trigs[nTrigName] = {
      "HLT_Mu17_TkMu8_v*",
-     "HLT_Mu22_TkMu8_v*",
-     "HLT_Mu22_TkMu22_v*",
      "HLT_Mu13_Mu8_v*",
-     "HLT_IsoMu24_v*",
      "HLT_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*",
      "HLT_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*",
-     "HLT_Mu8_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*",
-     "HLT_Mu17_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*",
-     "HLT_Ele27_WP80_v*",
-     "HLT_Mu15_Photon20_CaloIdL_v",
-     "HLT_Mu8_Ele17_CaloIdT_CaloIsoVL_v",
-     "HLT_Mu8_Ele17_CaloIdL_v"
+     "HLT_Ele17_CaloIdVT_CaloIsoVT_TrkIdT_TrkIsoVT_Ele8_Mass50_v*",
+     "HLT_Ele20_CaloIdVT_CaloIsoVT_TrkIdT_TrkIsoVT_SC4_Mass50_v*"
    };
+   MuonHLT_.clear();
 
-  //Push back into trigger list
-   for( int i = 0; i < nTrigName_; i++ ) {
-
-     HLT_trigName_.push_back(trigs[i]);
-     //listUnavail_[i] = -1;
+   for( int i = 0; i < nTrigName; i++ ) {
+     MuonHLT_.push_back(trigs[i]);
    }
 
+  int listRemoval[nTrigName] = {-1};
+  int ntrigName = MuonHLT_.size();
   bool changedConfig;
   if (!hltConfig_.init(iRun, iSetup, processName_, changedConfig)) {
     LogError("HLTMuonVal") << "Initialization of HLTConfigProvider failed!!";
     return;
-  } else {
-    //get trigger names in  the trigger menu
+  }
+  else {
     std::vector<std::string> triggerNames = hltConfig_.triggerNames();
-    //loop over preselected trigger names
-    for( int itrigName = 0; itrigName < nTrigName_; itrigName++ ) {
-      //listUnavail_[itrigName] = 0;
+    for( int itrigName = 0; itrigName < ntrigName; itrigName++ ) {
+      listRemoval[itrigName] = 0;
 
-      //bool isMatched = false;
-      //and check them agains 
-      //what is in the trigger menu 
+      // check list of triggers
+      ////cout << "trigger = " << itrigName << " " << MuonHLT_[itrigName] << endl;
+      bool isMatched = false;
       for( size_t i = 0; i < triggerNames.size(); i++) {
         std::vector<std::string> moduleNames = hltConfig_.moduleLabels( triggerNames[i] );
-        //match using regex, we want to be sure a given trigger name is still in the trigger list
-        //store unavailable triggers to remove them on the next step
-        std::vector<std::vector<std::string>::const_iterator> matches = edm::regexMatch(triggerNames, HLT_trigName_[itrigName]);
+        ////cout << "Trigger Path: " << triggerNames[i] << endl;
+	// find using wild card
+        std::vector<std::vector<std::string>::const_iterator> matches = edm::regexMatch(triggerNames, MuonHLT_[itrigName]);
         if( !matches.empty() ) {
-          BOOST_FOREACH(std::vector<std::string>::const_iterator match, matches) {
-            if( *match == triggerNames[i] ) {
-              //isMatched = true;
-              int nsize = moduleNames.size();
-              if( nsize-2 >= 0 ) {
-                //cout << "module names = " << moduleNames[nsize-2] << " " << moduleNames[nsize-3] << endl;
-                trigModuleNames_.push_back(moduleNames[nsize-2]);
-                //cout << "Filter name: " << trigModuleNames_[trigModuleNames_.size()-1] << endl;
-                if( nsize-3 >= 0 ) {
-                  trigModuleNames_preFil_.push_back(moduleNames[nsize-3]);
-                }
-                else {
-                  trigModuleNames_preFil_.push_back("");
-                }
+	  BOOST_FOREACH(std::vector<std::string>::const_iterator match, matches) {
+	    ////cout << "trigger match = " << *match << endl;
+	    if( *match == triggerNames[i] ) {
+	      isMatched = true;
+	      /*
+              //cout << "Filter name: " << trigModuleNames_[moduleNames.size()-2] << endl;
+              for( size_t j = 0; j < moduleNames.size(); j++) {
+                TString name = moduleNames[j];
+                //cout << "\t  Fliter Name: "<<moduleNames[j] << endl;
               }
-              break;
-            }
-          }
-        }
+	      */
+	      int nsize = moduleNames.size();
+	      if( nsize-2 >= 0 ) {
+		////cout << "module names = " << moduleNames[nsize-2] << " " << moduleNames[nsize-3] << endl;
+                trigModuleNames_.push_back(moduleNames[nsize-2]);
+                ////cout << "Filter name: " << trigModuleNames_[trigModuleNames_.size()-1] << endl;
+	        if( nsize-3 >= 0 ) {
+                  trigModuleNames_preFil_.push_back(moduleNames[nsize-3]);
+	        }
+		else {
+                  trigModuleNames_preFil_.push_back("");
+		}
+	      }
+	      break;
+	    }
+	  }
+	}
       }
-     // if( !isMatched ) listUnavail_[itrigName] = 1;
+      if( !isMatched ) listRemoval[itrigName] = 1;
     }
   }
 
+  // remove unavailable triggers
+  int itmp = 0;
+  for( vector<string>::iterator iter = MuonHLT_.begin(); iter != MuonHLT_.end(); ) {
+    if( listRemoval[itmp] > 0 ) 
+      iter = MuonHLT_.erase(iter);
+    else 
+      ++iter;
+    itmp++;
+  }
+  ntrigName = MuonHLT_.size();
+
+  // trigger filters
+  //for( int itrig = 0; itrig < ntrigName; itrig++ ) {
+  //  //cout << "Filter name: " << itrig << " " << MuonHLT_[itrig] << " " << trigModuleNames_[itrig] << " " << trigModuleNames__preFil[itrig] << endl;
+  //}
+
 }
+
 
 // ------------ method called once each job just after ending the event loop  ------------
 void 
@@ -574,80 +602,121 @@ float DiLeptonIntoNtuples::angleBetween(const T & lhs, const T & rhs) const {
 // makes hlt report and fills it to the ntuple
 ///////////////////////////////////////////////////////////////
 void DiLeptonIntoNtuples::hltReport(const edm::Event &iEvent) {
+   //
+   // trigger
+   //
 
-   //array to store the trigger decision for a given trigger name 
-   bool trigFired[nTrigName_];
-   for (int i = 0; i < nTrigName_; i++) trigFired[i] = false; 
+   int ntrigName = MuonHLT_.size();
+   ////cout << "ntrigName = " << ntrigName << " " << HLT_trigName_.max_size() << endl;
+   //for( int itrig = 0; itrig < ntrigName; itrig++ ) {
+   ////cout << "itrig = " << itrig << " " << MuonHLT_[itrig] << endl;
+   //}
+   /*
+   int index_hlt_mu17_mu8 = -1;
+   int index_hlt_mu17_tkmu8 = -1;
+   int index_hlt_mu22_tkmu8 = -1;
+   int index_hlt_mu22_tkmu22 = -1;
+   int index_hlt_mu13_tkmu8 = -1;
+   int index_hlt_isomu24 = -1;
+   int index_hlt_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = 1;
+   int index_hlt_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = -1;
+   int index_hlt_Mu8_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = -1;
+   int index_hlt_Mu17_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = -1;
+   int index_hlt_Ele27_WP80 = -1;
+   int index_hlt_Mu15_Photon20_CaloIdL = -1;
+   int index_hlt_Mu8_Ele17_CaloIdT_CaloIsoVL = -1;
 
-   //Read the trigger information in an event
+   for( int itrig = 0; itrig < ntrigName; itrig++ ) {
+     if( MuonHLT_[itrig] == "HLT_Mu17_Mu8_v*" ) index_hlt_mu17_mu8 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu17_TkMu8_v*" ) index_hlt_mu17_tkmu8 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu22_TkMu8_v*" ) index_hlt_mu22_tkmu8 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu22_TkMu22_v*" ) index_hlt_mu22_tkmu22 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu13_TkMu8_v*" ) index_hlt_mu13_tkmu8 = itrig;
+     if( MuonHLT_[itrig] == "HLT_IsoMu24_v*" ) index_hlt_isomu24 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*" ) index_hlt_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = itrig;
+     if( MuonHLT_[itrig] == "HLT_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*" ) index_hlt_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu8_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*" ) index_hlt_Mu8_Ele17_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu17_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL_v*" ) index_hlt_Mu17_Ele8_CaloIdT_CaloIsoVL_TrkIdVL_TrkIsoVL = itrig;
+     if( MuonHLT_[itrig] == "HLT_Ele27_WP80_v*" ) index_hlt_Ele27_WP80 = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu15_Photon20_CaloIdL_v*" ) index_hlt_Mu15_Photon20_CaloIdL = itrig;
+     if( MuonHLT_[itrig] == "HLT_Mu8_Ele17_CaloIdT_CaloIsoVL_v*" ) index_hlt_Mu8_Ele17_CaloIdT_CaloIsoVL = itrig;
+   }
+   ////cout << "index = " << index_hlt_mu17_mu8 << " " << index_hlt_mu17_tkmu8 << endl;
+   */
+
+   // read the whole HLT trigger lists fired in an event
+   bool *trigFired = new bool[ntrigName];
+   for( int i = 0; i < ntrigName; i++ ) trigFired[i] = false;
    Handle<TriggerResults> trigResult;
    iEvent.getByLabel(edm::InputTag("TriggerResults","",processName_), trigResult);
    if( !trigResult.failedToGet() ) {
        int ntrigs = trigResult->size();
        const edm::TriggerNames trigName = iEvent.triggerNames(*trigResult);
        for( int itrig = 0; itrig != ntrigs; ++itrig) {
-           //cout << "trigName = " << trigName.triggerName(itrig) << " " << itrig << endl;
-           for( int itrigName = 0; itrigName < nTrigName_; itrigName++ ) {
-             //match using regex, we want to be sure a given trigger name is still in the trigger list
-             //store unavailable triggers to remove them on the next step
-             std::vector<std::vector<std::string>::const_iterator> matches = edm::regexMatch(trigName.triggerNames(), HLT_trigName_[itrigName]);
+	   ////cout << "trigName = " << trigName.triggerName(itrig) << " " << itrig << endl;
+	   for( int itrigName = 0; itrigName < ntrigName; itrigName++ ) {
+             std::vector<std::vector<std::string>::const_iterator> matches = edm::regexMatch(trigName.triggerNames(), MuonHLT_[itrigName]);
              if( !matches.empty() ) {
-               BOOST_FOREACH(std::vector<std::string>::const_iterator match, matches) {
-                 if( trigName.triggerIndex(*match) >= (unsigned int)ntrigs ) continue;
-                 //checked weather it was fired in ana event
-                 if( trigResult->accept(trigName.triggerIndex(*match)) ) trigFired[itrigName] = true;
-               }
-            }
-         }
-      }
+	       BOOST_FOREACH(std::vector<std::string>::const_iterator match, matches) {
+		 ////cout << "trigger match = " << *match << endl;
+	         if( trigName.triggerIndex(*match) >= (unsigned int)ntrigs ) continue;
+	         if( trigResult->accept(trigName.triggerIndex(*match)) ) trigFired[itrigName] = true;
+                 ////cout << "trigger fire = " << trigFired[itrigName] << endl;
+	       }
+	     }
+	   }
+       }
    }
 
-   //below is to store the trigger object kinematics for trigger matching purposes 
    edm::Handle< trigger::TriggerEvent > triggerObject;
    iEvent.getByLabel(edm::InputTag("hltTriggerSummaryAOD","",processName_), triggerObject);
    const trigger::TriggerObjectCollection & toc(triggerObject->getObjects());
    int ntrigTot = 0;
+   ////cout << "size filter = " << triggerObject->sizeFilters() << endl;
    for( size_t k = 0; k < triggerObject->sizeFilters(); ++ k ) {
        std::string fullname = triggerObject->filterTag(k).encode();
        std::string filterName;
+       ////cout << "filterName = " << filterName << endl;
        size_t m = fullname.find_first_of(':');
        if( m != std::string::npos ) {
-         filterName = fullname.substr(0, m);
+	 filterName = fullname.substr(0, m);
        }
        else {
-         filterName = fullname;
+	 filterName = fullname;
        }
 
        if( &toc != 0 ) {
-         const trigger::Keys & it = triggerObject->filterKeys(k);
-         for( trigger::Keys::const_iterator ky = it.begin(); ky !=it.end(); ++ky ) {
-           double hlt_pt = toc[*ky].pt();
-           //double hlt_eta = toc[*ky].eta();
+	 const trigger::Keys & it = triggerObject->filterKeys(k);
+	 for( trigger::Keys::const_iterator ky = it.begin(); ky !=it.end(); ++ky ) {
+	   double hlt_pt = toc[*ky].pt();
+	   double hlt_eta = toc[*ky].eta();
+	   ////cout << "hlt kine = " << hlt_pt << " " << hlt_eta << endl;
 
-           for( int itf = 0; itf < nTrigName_; itf++ ) {
-               if( filterName == trigModuleNames_[itf]) { 
-                 //HLT_trigName_.push_back(names);
-                 //HLT_trigType[ntrigTot] = itf;
-                 HLT_trigFired[ntrigTot] = trigFired[itf];
-
-                 HLT_trigPt[ntrigTot] = hlt_pt;
-                 HLT_trigEta[ntrigTot] = toc[*ky].eta();
-                 HLT_trigPhi[ntrigTot] = toc[*ky].phi();
-                 //cout << "Debug printout for event: " << iEvent.id() << endl;
-                 //cout << "ntrigTot: " << ntrigTot << endl; //" " << HLT_trigName_.at(ntrigTot) << endl;
-                 //cout << "HLT_trigType[ntrigTot]: " << HLT_trigType[ntrigTot] << endl;
-                 //cout << "HLT_trigFired[ntrigTot]: " << HLT_trigFired[ntrigTot]<< endl;
-                 //cout << "HLT_trigPt[ntrigTot]: " << HLT_trigPt[ntrigTot]<< endl;
-                 //cout << "HLT_trigEta[ntrigTot]: " << HLT_trigEta[ntrigTot]<< endl;
-                 //cout << "HLT_trigPhi[ntrigTot] : " << HLT_trigPhi[ntrigTot] << endl;
-                 ntrigTot++;
-               }
-            }
-         }
-      }
+	   for( int itf = 0; itf < ntrigName; itf++ ) {
+	     string names = "";
+             ////cout << "filterName = " << k << " " << filterName << " " << trigModuleNames_[itf] << " " << trigModuleNames_preFil_[itf] << " " << HLT_trigName_.size() << endl;
+	       if( filterName == trigModuleNames_[itf] ) { 
+	         ////cout << "filter name = " << filterName << " " << ntrigTot << " " << itf << " " << hlt_pt << " " << toc[*ky].eta() << " " << toc[*ky].phi() << endl;
+		 names = MuonHLT_[itf];
+	         HLT_trigType[ntrigTot] = itf;
+	         HLT_trigFired[ntrigTot] = trigFired[itf];
+	         HLT_trigPt[ntrigTot] = hlt_pt;
+	         HLT_trigEta[ntrigTot] = toc[*ky].eta();
+	         HLT_trigPhi[ntrigTot] = toc[*ky].phi();
+		 HLT_trigName_.push_back(names);
+	         ntrigTot++;
+	       }
+	   }
+	 }
+       }
    }
    HLT_ntrig_ = ntrigTot;
+   
+   //for( int i = 0; i < HLT_ntrig_; i++ ) {
+     ////cout << "trig = " << i << " " << HLT_trigType[i] << " " << HLT_trigPt[i] << " " << HLT_trigEta[i] << " " << HLT_trigPhi[i] << " " << _HLT_trigName[i] << endl;
+   //}
 }
+
 
 
 //////////////////////////////////////////////////////////////
@@ -697,6 +766,9 @@ void DiLeptonIntoNtuples::fillMuon(const pat::Muon *mu, const edm::Event& iEvent
   iEvent.getByLabel("offlineBeamSpot", beamSpotHandle);
   reco::BeamSpot beamSpot = (*beamSpotHandle);
 
+  edm::Handle<reco::VertexCollection> pvHandle;
+  iEvent.getByLabel("offlinePrimaryVertices", pvHandle);
+
   purdue::Muon *pMuon = new purdue::Muon();//purdue::LorentzVector(mu->p4()));
 
   pMuon->pt_              = mu->pt();
@@ -731,8 +803,13 @@ void DiLeptonIntoNtuples::fillMuon(const pat::Muon *mu, const edm::Event& iEvent
   if ( muonTrk.isNonnull() ) {
      if ( muonTrk->normalizedChi2() < 1000 ) pMuon->muNchi2_ = muonTrk->normalizedChi2();
 
-     pMuon->d0_       = muonTrk->dxy(beamSpot.position());
-     pMuon->dz_       = muonTrk->dz(beamSpot.position());
+     pMuon->d0BS_       = muonTrk->dxy(beamSpot.position());
+     pMuon->dzBS_       = muonTrk->dz(beamSpot.position());
+     if ( !pvHandle->empty() && !pvHandle->front().isFake() ) {
+         const reco::Vertex& vtx = pvHandle->front();
+         pMuon->d0BS_ = muonTrk->dxy(vtx.position());
+         pMuon->dzBS_ = muonTrk->dz(vtx.position());
+        }
  
      //global muon
      if ( pMuon->typeBits_ == 1 ) {
@@ -744,7 +821,7 @@ void DiLeptonIntoNtuples::fillMuon(const pat::Muon *mu, const edm::Event& iEvent
           pMuon->nTkHits_ = inhit.numberOfValidTrackerHits();
           pMuon->nPixHits_ = inhit.numberOfValidPixelHits();
           pMuon->nMuHits_ = glbhit.numberOfValidMuonHits();
-          //cout << pMuon->nTrackerLayers_ << " " << pMuon->nTkHits_ << " " << pMuon->nPixHits_ << " " << pMuon->nMuHits_ << endl;
+          ////cout << pMuon->nTrackerLayers_ << " " << pMuon->nTkHits_ << " " << pMuon->nPixHits_ << " " << pMuon->nMuHits_ << endl;
      }
  }//track nonnull
  singleMuons->push_back(*pMuon); 
@@ -753,7 +830,6 @@ void DiLeptonIntoNtuples::fillMuon(const pat::Muon *mu, const edm::Event& iEvent
 
 void DiLeptonIntoNtuples::fillDimuon(int mu1, int mu2, const edm::EventSetup& iSetup, const edm::Event& iEvent)
 {
-
   // electrons
   edm::Handle<pat::MuonCollection> muonHandle;
   iEvent.getByLabel(theMuonLabel_, muonHandle);
@@ -809,7 +885,7 @@ void DiLeptonIntoNtuples::fillDimuon(int mu1, int mu2, const edm::EventSetup& iS
 
 
 //--------------------------------------------------------------------------------------------------
-double DiLeptonIntoNtuples::D0Corrected(const pat::Electron *ele, const reco::Vertex *pv) const
+double DiLeptonIntoNtuples::D0Corrected(const reco::GsfElectron *ele, const reco::Vertex *pv) const
 {
   // Return corrected d0 with respect to primary vertex or beamspot.
   double lXM =  -TMath::Sin(ele->bestTrack()->phi()) * ele->bestTrack()->d0();
@@ -821,7 +897,7 @@ double DiLeptonIntoNtuples::D0Corrected(const pat::Electron *ele, const reco::Ve
   return d0Corr;
 }
 
-double DiLeptonIntoNtuples::DzCorrected(const pat::Electron *ele, const reco::Vertex *pv) const
+double DiLeptonIntoNtuples::DzCorrected(const reco::GsfElectron *ele, const reco::Vertex *pv) const
 {
   // Compute Dxy with respect to a given position
   TVector3 momPerp(ele->bestTrack()->px(),ele->bestTrack()->py(),0);
@@ -830,8 +906,9 @@ double DiLeptonIntoNtuples::DzCorrected(const pat::Electron *ele, const reco::Ve
 }
 
 //--------------------------------------------------------------------------------------------------
-void DiLeptonIntoNtuples::fillElectron(const pat::Electron* ele, const edm::Event& iEvent)
+void DiLeptonIntoNtuples::fillElectron(const reco::GsfElectron* ele, const edm::Event& iEvent)
 {
+  //cout << "4" << endl;
   edm::Handle<reco::BeamSpot> beamSpotHandle;
   iEvent.getByLabel("offlineBeamSpot", beamSpotHandle);
   reco::BeamSpot beamSpot = (*beamSpotHandle);
@@ -841,7 +918,7 @@ void DiLeptonIntoNtuples::fillElectron(const pat::Electron* ele, const edm::Even
   iEvent.getByLabel("allConversions", hConversions);
 
   purdue::Electron *pElectron = new purdue::Electron();
-                  
+
   pElectron->pt_              = ele->pt();
   pElectron->eta_             = ele->eta();
   pElectron->phi_             = ele->phi();
@@ -851,8 +928,11 @@ void DiLeptonIntoNtuples::fillElectron(const pat::Electron* ele, const edm::Even
   pElectron->trkIso03_        = ele->dr03TkSumPt();
   pElectron->emIso03_         = ele->dr03EcalRecHitSumEt();
   pElectron->hadIso03_        = ele->dr03HcalTowerSumEt();
-  pElectron->d0_              = D0Corrected(ele,&*theVertex_);
-  pElectron->dz_              = DzCorrected(ele,&*theVertex_);  
+  pElectron->d0BS_            = D0Corrected(ele,&*theVertex_);
+  pElectron->dzBS_            = DzCorrected(ele,&*theVertex_);  
+  pElectron->d0VTX_           = D0Corrected(ele,&*theVertex_);
+  pElectron->dzVTX_           = DzCorrected(ele,&*theVertex_);  
+  //cout << "5" << endl;
   pElectron->scEt_            = (ele->superCluster()->energy())*(ele->pt())/(ele->p());
   pElectron->scEta_           = ele->superCluster()->eta();
   pElectron->scPhi_           = ele->superCluster()->phi();
@@ -868,21 +948,20 @@ void DiLeptonIntoNtuples::fillElectron(const pat::Electron* ele, const edm::Even
   pElectron->partnerDeltaCot_ = 0;//ele->ConvPartnerDCotTheta();
   pElectron->partnerDist_     = 0;//ele->ConvPartnerDist();
   pElectron->q_               = ele->charge();  
- 
+
+  //cout << "6" << endl; 
   pElectron->scID_            = 0;//ele->superCluster()->GetUniqueID();
   pElectron->trkID_           = 0;//(ele->HasTrackerTrk()) ? ele->TrackerTrk()->GetUniqueID() : 0;
   pElectron->isConv_          = ConversionTools::hasMatchedConversion(*ele,hConversions,beamSpot.position());
-  
+ 
   pElectron->typeBits_=0;
   if(ele->ecalDriven())    { pElectron->typeBits_ |= kEcalDriven; }
   if(ele->trackerDrivenSeed()) { pElectron->typeBits_ |= kTrackerDriven; }
   pElectron->mva_ = 0; //fEleMVA->MVAValue(ele, fVertex);
 
   //PF based isolations
-  //PF based isolations
   setEleIsolations(iEvent, ele, pElectron);
   pElectron->AEffUser_ = isolEffectAreasAl((ele)->superCluster()->eta());
-
   singleElectrons->push_back(*pElectron);
 
 }
@@ -895,12 +974,13 @@ void DiLeptonIntoNtuples::fillDielectron(int ele1, int ele2, const edm::Event& i
   iEvent.getByLabel("allConversions", hConversions);
 
   // electrons
-  edm::Handle<pat::ElectronCollection> electronHandle;
-  iEvent.getByLabel(theElectronLabel_, electronHandle);
+  edm::Handle<reco::GsfElectronCollection> electronHandle;
+  iEvent.getByLabel("calibratedElectrons","calibratedGsfElectrons", electronHandle);
+  //iEvent.getByLabel("gsfElectrons",electronHandle);
 
   purdue::Dielectron* pDielectron = new purdue::Dielectron(ele1,ele2);
-  const pat::Electron electron1 = electronHandle->at(ele1);
-  const pat::Electron electron2 = electronHandle->at(ele2);
+  const reco::GsfElectron electron1 = electronHandle->at(ele1);
+  const reco::GsfElectron electron2 = electronHandle->at(ele2);
 
   reco::NamedCompositeCandidate aDYcand;
   aDYcand.setP4(electron1.p4() + electron2.p4());
@@ -909,7 +989,6 @@ void DiLeptonIntoNtuples::fillDielectron(int ele1, int ele2, const edm::Event& i
   pDielectron->pt_ = aDYcand.pt();
 
   diElectrons->push_back(*pDielectron);
-
 }
   
 //--------------------------------------------------------------------------------------------------
@@ -964,7 +1043,7 @@ double DiLeptonIntoNtuples::isolEffectAreasAl(double eta) {
       return Aeff;
 }
 
-void DiLeptonIntoNtuples::setEleIsolations(const edm::Event& iEvent, const pat::Electron* thisEle, purdue::Electron* &myEle) 
+void DiLeptonIntoNtuples::setEleIsolations(const edm::Event& iEvent, const reco::GsfElectron* thisEle, purdue::Electron* &myEle) 
 {
   // iso deposits
   IsoDepositVals isoVals(isoValInputTags_.size());
@@ -973,15 +1052,15 @@ void DiLeptonIntoNtuples::setEleIsolations(const edm::Event& iEvent, const pat::
   }
 
   // electrons
-  edm::Handle<pat::ElectronCollection> electronHand;
-  iEvent.getByLabel(theElectronLabel_, electronHand);
+  edm::Handle<reco::GsfElectronCollection> electronHand;
+  iEvent.getByLabel("gsfElectrons", electronHand);
   Nelectrons_ = electronHand->size();
 
    // loop on electrons
   for(int i = 0; i < Nelectrons_; ++i) {
 
    // get reference to electron
-   pat::ElectronRef ele(electronHand, i);
+   reco::GsfElectronRef ele(electronHand, i);
    //match 
    if (fabs((*&ele)->pt() - thisEle->pt()) > 0.0000001) continue;
 
